@@ -5,6 +5,8 @@
 #include <array>
 #include <atomic>
 
+#include "dsp/DenoiseEngine.h"
+
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
 {
@@ -17,13 +19,13 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
 
-    bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
 
-    void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     using AudioProcessor::processBlock;
 
     //==============================================================================
-    juce::AudioProcessorEditor *createEditor() override;
+    juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
 
     //==============================================================================
@@ -39,11 +41,11 @@ public:
     int getCurrentProgram() override;
     void setCurrentProgram(int index) override;
     const juce::String getProgramName(int index) override;
-    void changeProgramName(int index, const juce::String &newName) override;
+    void changeProgramName(int index, const juce::String& newName) override;
 
     //==============================================================================
-    void getStateInformation(juce::MemoryBlock &destData) override;
-    void setStateInformation(const void *data, int sizeInBytes) override;
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
 
     //==============================================================================
     // APVTS Parameter Management
@@ -57,14 +59,20 @@ public:
         return rmsLevels[static_cast<size_t>(channel)].load(std::memory_order_relaxed);
     }
 
+    DenoiseEngine& getDenoiseEngine() noexcept { return denoiseEngine; }
+
 private:
+    static BusesProperties makeBusesProperties();
+
     //==============================================================================
-    // DSP & Real-time State
-    juce::dsp::Gain<float> gainProcessor;
+    DenoiseEngine denoiseEngine;
     std::array<std::atomic<float>, 2> rmsLevels{{0.0f, 0.0f}};
+    float lastAlpha = -1.0f;
+    float lastFloor = -1.0f;
+    int lastHostMode = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
 };
 
 // Convenience alias matching the CMake project name
-using SimpleGainAudioProcessor = AudioPluginAudioProcessor;
+using NoiseCleanerAudioProcessor = AudioPluginAudioProcessor;

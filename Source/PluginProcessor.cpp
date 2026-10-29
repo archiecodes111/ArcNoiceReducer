@@ -6,28 +6,54 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Gain parameter (-60 dB to +12 dB with 0 dB default)
+    // Subtraction factor alpha (\alpha \in [0.0, 5.0])
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"gain", 1},
-        "Gain",
-        juce::NormalisableRange<float>(-60.0f, 12.0f, 0.1f),
-        0.0f,
-        juce::AudioParameterFloatAttributes().withLabel("dB")
+        juce::ParameterID{"alpha", 1},
+        "Subtraction Factor (alpha)",
+        juce::NormalisableRange<float>(0.0f, 5.0f, 0.05f),
+        1.50f,
+        juce::AudioParameterFloatAttributes().withLabel("")
+    ));
+
+    // Spectral floor beta (\beta \in [0.0, 0.20]) - fixed sweet spot baseline
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"floor", 1},
+        "Spectral Floor (beta)",
+        juce::NormalisableRange<float>(0.0f, 0.20f, 0.005f),
+        0.025f,
+        juce::AudioParameterFloatAttributes().withLabel("")
+    ));
+
+    // Audition Mode (Denoised, Bypass, Delta)
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{"auditionMode", 1},
+        "Audition Mode",
+        juce::StringArray{"Denoised", "Bypass", "Delta"},
+        0
     ));
 
     return { params.begin(), params.end() };
 }
 
+juce::AudioProcessor::BusesProperties AudioPluginAudioProcessor::makeBusesProperties()
+{
+    BusesProperties buses;
+
+    // For VST3/DAW plugins, provide stereo input for DAW track processing.
+    // For the Standalone application, do not declare an input bus so the JUCE standalone wrapper
+    // never creates or displays the yellow "Audio input is muted to avoid feedback loop" warning bar.
+    if (!juce::JUCEApplicationBase::isStandaloneApp())
+    {
+        buses.addBus(true, "Input", juce::AudioChannelSet::stereo(), true);
+    }
+
+    buses.addBus(false, "Output", juce::AudioChannelSet::stereo(), true);
+    return buses;
+}
+
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
-    : AudioProcessor(BusesProperties()
-#if !JucePlugin_IsMidiEffect
-#if !JucePlugin_IsSynth
-                         .withInput("Input", juce::AudioChannelSet::stereo(), true)
-#endif
-                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)
-#endif
-      ),
+    : AudioProcessor(makeBusesProperties()),
       apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
 }
@@ -103,14 +129,7 @@ void AudioPluginAudioProcessor::changeProgramName(int index, const juce::String 
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // Setup DSP chain specifications
-    juce::dsp::ProcessSpec spec;
-    spec.sampleRate = sampleRate;
-    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
-    spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
-
-    gainProcessor.prepare(spec);
-    gainProcessor.setRampDurationSeconds(0.02); // 20ms linear ramp prevents zipper noise
+    juce::ignoreUnused(sampleRate, samplesPerBlock);
 
     for (auto &level : rmsLevels)
         level.store(0.0f, std::memory_order_relaxed);
@@ -118,26 +137,22 @@ void AudioPluginAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
 
 void AudioPluginAudioProcessor::releaseResources()
 {
-    gainProcessor.reset();
 }
 
 bool AudioPluginAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const
 {
-#if JucePlugin_IsMidiEffect
-    juce::ignoreUnused(layouts);
-    return true;
-#else
+    // Output must be mono or stereo
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
      && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
 
-#if !JucePlugin_IsSynth
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+    // Input can be disabled (for standalone file playback or muted mic), mono, or stereo
+    if (layouts.getMainInputChannelSet() != juce::AudioChannelSet::disabled()
+     && layouts.getMainInputChannelSet() != juce::AudioChannelSet::mono()
+     && layouts.getMainInputChannelSet() != juce::AudioChannelSet::stereo())
         return false;
-#endif
 
     return true;
-#endif
 }
 
 void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
@@ -149,20 +164,51 @@ void AudioPluginAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     const auto totalNumInputChannels  = getTotalNumInputChannels();
     const auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-    // Clear output channels that didn't contain input data to prevent garbage audio
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // Fetch gain parameter atomically (thread-safe, lock-free)
-    const float gainDb = apvts.getRawParameterValue("gain")->load(std::memory_order_relaxed);
-    gainProcessor.setGainDecibels(gainDb);
+    // Check for parameter updates from host DAW automation
+    const float alpha = apvts.getRawParameterValue("alpha")->load(std::memory_order_relaxed);
+    if (std::abs(alpha - lastAlpha) > 0.001f)
+    {
+        lastAlpha = alpha;
+        denoiseEngine.setAlpha(alpha);
+    }
 
-    // Process buffer through smoothed juce::dsp::Gain
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> context(block);
-    gainProcessor.process(context);
+    const float floor = apvts.getRawParameterValue("floor")->load(std::memory_order_relaxed);
+    if (std::abs(floor - lastFloor) > 0.0001f)
+    {
+        lastFloor = floor;
+        denoiseEngine.setSpectralFloor(floor);
+    }
 
-    // Compute RMS output levels for lock-free GUI metering
+    const auto* modeParam = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter("auditionMode"));
+    if (modeParam != nullptr)
+    {
+        const int hostMode = modeParam->getIndex();
+        if (hostMode != lastHostMode && lastHostMode != -1)
+        {
+            lastHostMode = hostMode;
+            denoiseEngine.setAuditionMode(static_cast<AuditionMode>(hostMode));
+        }
+        else if (lastHostMode == -1)
+        {
+            lastHostMode = static_cast<int>(denoiseEngine.getAuditionMode());
+        }
+    }
+
+    if (denoiseEngine.getIsPlaying())
+    {
+        // Stream audio file playback
+        denoiseEngine.getNextAudioBlock(buffer, buffer.getNumSamples());
+    }
+    else
+    {
+        // If not playing, keep buffer clean
+        buffer.clear();
+    }
+
+    // Compute RMS output levels for GUI meter
     for (int channel = 0; channel < std::min(totalNumOutputChannels, 2); ++channel)
     {
         const float rms = buffer.getRMSLevel(channel, 0, buffer.getNumSamples());
@@ -184,7 +230,6 @@ juce::AudioProcessorEditor *AudioPluginAudioProcessor::createEditor()
 //==============================================================================
 void AudioPluginAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
 {
-    // Save APVTS parameters to binary XML state
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
@@ -192,7 +237,6 @@ void AudioPluginAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
 
 void AudioPluginAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
 {
-    // Restore APVTS parameters from binary XML state
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState != nullptr && xmlState->hasTagName(apvts.state.getType()))
         apvts.replaceState(juce::ValueTree::fromXml(*xmlState));

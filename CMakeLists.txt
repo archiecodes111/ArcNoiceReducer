@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.23.1)
 
-project(SimpleGainPlugin VERSION 0.1.0 LANGUAGES C CXX)
+project(NoiseCleaner VERSION 1.0.0 LANGUAGES C CXX)
 
 # Modern C++20 standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Project metadata
-set(PROJECT_NAME "SimpleGainPlugin")
-set(PRODUCT_NAME "Simple Gain Plugin")
+set(PROJECT_NAME "NoiseCleaner")
+set(PRODUCT_NAME "Arc Noise Reducer")
 set(COMPANY_NAME "Archie DSP")
-set(BUNDLE_ID "com.archiedsp.SimpleGainPlugin")
+set(BUNDLE_ID "com.archiedsp.ArcNoiseReducer")
 
 # Formats: Standalone & VST3 by default, plus AudioUnit (AU) on macOS
 set(FORMATS Standalone VST3)
@@ -19,12 +19,9 @@ if(APPLE)
 endif()
 
 # Build options
-# WARNING: Setting COPY_PLUGIN_TO_SYSTEM to ON requires Administrator privileges on Windows
-# or may fail if your DAW is currently open and locking the plugin binary.
 option(COPY_PLUGIN_TO_SYSTEM "Copy plugin to system plugin folder after build" OFF)
 
 # JUCE dependency management
-# Uses local submodule if present; otherwise fetches JUCE 8 automatically via FetchContent
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/JUCE/CMakeLists.txt")
     message(STATUS "Using local JUCE from modules/JUCE")
     add_subdirectory(modules/JUCE)
@@ -40,7 +37,7 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
-# Windows runtime library configuration (static runtime for easier distribution)
+# Windows runtime library configuration
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -51,7 +48,7 @@ juce_add_plugin(${PROJECT_NAME}
     BUNDLE_ID "${BUNDLE_ID}"
     COPY_PLUGIN_AFTER_BUILD ${COPY_PLUGIN_TO_SYSTEM}
     PLUGIN_MANUFACTURER_CODE ADSP
-    PLUGIN_CODE SmGP
+    PLUGIN_CODE NsCl
     FORMATS ${FORMATS}
     PRODUCT_NAME "${PRODUCT_NAME}"
     NEEDS_MIDI_INPUT FALSE
@@ -66,11 +63,35 @@ target_sources(${PROJECT_NAME} PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.h
     Source/PluginEditor.cpp
+
+    # DSP Module
+    Source/dsp/AudioFileManager.h
+    Source/dsp/AudioFileManager.cpp
+    Source/dsp/NoiseProfile.h
+    Source/dsp/FrameProcessor.h
+    Source/dsp/SpectralSubtractor.h
+    Source/dsp/AudioReconstructor.h
+    Source/dsp/DenoiseEngine.h
+    Source/dsp/DenoiseEngine.cpp
+
+    # UI Module
+    Source/ui/CustomLookAndFeel.h
+    Source/ui/CustomLookAndFeel.cpp
+    Source/ui/WaveformComponent.h
+    Source/ui/WaveformComponent.cpp
+    Source/ui/SpectrumComponent.h
+    Source/ui/SpectrumComponent.cpp
+    Source/ui/WeissDisplayComponent.h
+    Source/ui/WeissDisplayComponent.cpp
+    Source/ui/ControlsComponent.h
+    Source/ui/ControlsComponent.cpp
 )
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source/dsp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Source/ui"
 )
 
 # Optional asset bundling
@@ -94,10 +115,9 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 )
 
 # Link necessary JUCE modules
-# juce_audio_utils automatically provides:
-# juce_audio_processors, juce_audio_basics, juce_gui_basics, juce_graphics, juce_events, juce_core, juce_data_structures
 target_link_libraries(${PROJECT_NAME} PRIVATE
     juce::juce_audio_utils
+    juce::juce_audio_formats
     juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags

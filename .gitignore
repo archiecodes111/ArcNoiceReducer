@@ -44,4 +44,6 @@ CMakeUserPresets.json
 *.app
 
 # Logs
-*.log
+*.log 
+# Agent caches
+.agents/

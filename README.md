@@ -1,241 +1,113 @@
-# 🎛️ Modern JUCE Audio Plugin Boilerplate
+# ARC NOISE REDUCER - Standalone Application & VST3 Plugin
 
-> **A production-ready, crash-resilient JUCE audio plugin boilerplate for Visual Studio Code & CMake.**  
-> Built to eliminate configuration headaches, avoid beginner pitfalls, and provide a fully working, thread-safe DSP starting point.
-
-[![CI Build & Test](https://github.com/juce-framework/JUCE/actions/workflows/build.yml/badge.svg)](https://github.com/)
-![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
-![JUCE](https://img.shields.io/badge/JUCE-8.0-orange.svg)
-![Formats](https://img.shields.io/badge/Formats-VST3%20%7C%20AU%20%7C%20Standalone-green.svg)
-![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
+> A professional mastering-grade noise reduction application and audio plugin built with JUCE 8 and modern C++20.
+> Features precision Swiss-grade studio mastering aesthetics, high-contrast typography, and tactile physical hardware ergonomics.
+> Implements STFT-based magnitude spectral subtraction with noise profile estimation, dual-mode visual mastering display, interactive waveform profiling, and 3-way auditioning.
 
 ---
 
-## 🌟 Why This Exists
+## Overview
 
-Getting started with audio plugin development is intimidating. Beginners often spend days battling:
-- Cryptic CMake generator and kit errors.
-- Unlinked JUCE modules or missing submodules.
-- Thread-safety data races between the audio thread and UI thread.
-- Audible "zipper noise" from unsmoothed parameters.
-- Missing state persistence (losing all plugin settings whenever a DAW project is reloaded).
-- Build failures from permission issues (`COPY_PLUGIN_AFTER_BUILD`).
+ARC NOISE REDUCER is designed to attenuate steady background noise (microphone hiss, ventilation, fan hum, electrical noise) from speech and music audio recordings using a learned noise profile and magnitude spectral subtraction.
 
-**This boilerplate solves all of that out of the box.** Download it, open it in VS Code, press **F5**, and start coding your DSP algorithms immediately.
-
----
-
-## ✨ Features
-
-- ⚡ **Zero-Friction Setup**: Automatic JUCE dependency handling via CMake `FetchContent` with local submodule fallback. Works immediately even if downloaded as a ZIP!
-- 🎚️ **Production-Ready Parameter System**: Fully implemented `AudioProcessorValueTreeState` (APVTS) for sample-accurate DAW automation and preset recall.
-- 💾 **DAW State Persistence**: Robust XML state saving and loading in `getStateInformation()` and `setStateInformation()`.
-- 🎛️ **Smoothed DSP**: Clean gain processing using `juce::dsp::Gain<float>` with ramped smoothing to eliminate zipper noise and clicking.
-- 📊 **Real-Time Safe Metering**: Lock-free, atomic RMS output meters (`std::atomic<float>`) polled at 30 FPS by the UI thread without audio thread stalls.
-- 🎨 **Modern Dark UI**: Resizable vector interface with dual stereo LED-style RMS level meters.
-- 🍏 **True Cross-Platform**: Supports **VST3**, **Standalone**, and **AudioUnit (AU)** on macOS (Logic Pro / GarageBand compatible).
-- 🛡️ **Safe Build Defaults**: No Administrator permission crashes—standalone binaries and plugin outputs stay in your project build directory.
-- 🐞 **Pre-configured VS Code Debugging**: `.vscode/` includes instant F5 debugging for Standalone and DAW process attachment.
-- 🚀 **GitHub Actions CI**: Automated multi-platform build workflow (Windows, macOS, Linux).
+The user interface features a high-end mastering hardware console layout:
+- Warm brushed-aluminum faceplate with dark master utility bar and ARC DSP badge.
+- ARC acoustic filtration arc monogram logo and bold cyan/slate brand typography.
+- Recessed master display flanked by dual-column vertical mastering meters with ceiling marker bands.
+- Tabbed master display: instant switching between `[ FREQUENCY ]` spectral curve analysis and `[ WAVEFORM ]` noise-profiling timeline.
+- Precision matte black cylindrical knobs with amber indicator LEDs and drop-shadows.
+- High-contrast, guaranteed-legible buttons with bold crisp white typography and distinct active states.
 
 ---
 
-## 📁 Project Structure
+## Features & Capabilities
 
-```text
-JUCE-Plugin-Boilerplate/
-├── .github/
-│   └── workflows/
-│       └── build.yml             # Automated CI for Windows, macOS, Linux
-├── .vscode/
-│   ├── extensions.json           # Recommended VS Code extensions
-│   ├── settings.json             # CMake & Intellisense configuration
-│   └── launch.json               # One-click F5 debug configurations
-├── Source/
-│   ├── PluginProcessor.h         # Audio processor, APVTS, and DSP declarations
-│   ├── PluginProcessor.cpp       # Real-time audio callback & state management
-│   ├── PluginEditor.h            # UI components and timer declarations
-│   └── PluginEditor.cpp          # Vector UI painting, controls & visual meters
-├── assets/                       # (Optional) Drop PNG/WAV/SVG assets here
-├── modules/
-│   └── JUCE/                     # Local JUCE framework (or auto-fetched)
-├── .gitignore                    # Comprehensive audio dev ignore rules
-├── CMakeLists.txt                # Modern CMake configuration (C++20)
-└── README.md                     # Documentation
+- Recessed Mastering Center Display:
+  - Dual-Column Vertical Peak/RMS Meters: Flanking left (IN) and right (OUT) channels with red ceiling marker bands.
+  - Frequency Spectrum View: 20 Hz - 20 kHz logarithmic graph showing raw input, noise profile, and clean denoised spectrum.
+  - Waveform Profiling View: Full audio timeline with interactive draggable noise-selection handles and playhead scrubbing.
+  - Tab Switcher: One-click toggling between `[ FREQUENCY ]` and `[ WAVEFORM ]`.
+- One-Click Noise Profiling:
+  - Learn Noise From Selection: Computes the average magnitude spectrum over the selected frames.
+  - Load Noise File: Alternatively load a dedicated noise-only recording.
+- Precision Mastering Hardware Knobs:
+  - Subtraction (alpha): Rotary dial adjusting attenuation strength from 0.00 to 5.00 (default 1.50).
+  - FFT Resolution: Switchable between 1024, 2048 (default), and 4096 points.
+  - Output Trim: Output makeup gain adjustment (-12 dB to +12 dB).
+  - Internal Spectral Floor (beta): Locked to the calibrated studio sweet spot (0.025 / -32 dB) to completely eliminate musical noise chirping artifacts with zero audible loss in signal transparency.
+- 3-Way Audition Modes:
+  - Denoised Output: Audition cleaned audio.
+  - BYPASS: Instant comparison with the raw original audio via the green bypass rocker.
+  - Residual: Audition the extracted noise (x[n] - y[n]) to verify that speech/music transients are preserved.
+- Universal File I/O:
+  - Loads WAV, MP3, AIFF, FLAC, and OGG files via juce::AudioFormatManager.
+  - Exports cleaned audio to studio-quality 24-bit WAV files.
+
+---
+
+## Signal Processing Pipeline & Class Mapping
+
+```
+                                  +-------------------+
+                                  | AudioFileManager  |
+                                  +---------+---------+
+                                            |
+                                  +---------v---------+
+                                  |  FrameProcessor   | (Analysis Windowing w_a, Hop H)
+                                  +---------+---------+
+                                            |
+                                  +---------v---------+
+                                  |   juce::dsp::FFT  |
+                                  +----+---------+----+
+                                       |         |
+                  (Noise Segment)      |         | (Signal Frames)
+              +------------------------+         +----------------------+
+              |                                                         |
+     +--------v--------+                                       +--------v--------+
+     |  NoiseProfile   |  D_v(k) = (1/M) sum |V(m,k)|           |SpectralSubtractor|  G(m,k) = max(Dx - a*Dv, 0) / (Dx + eps)
+     +--------+--------+                                       +--------+--------+
+              |                                                         |
+              +---------------------------------------------------------+
+                                            |
+                                  +---------v---------+
+                                  | AudioReconstructor| (IFFT, Synthesis Window w_s, Overlap-Add & Normalise)
+                                  +---------+---------+
+                                            |
+                                  +---------v---------+
+                                  |   DenoiseEngine   | (3-Way Audition & WAV Export)
+                                  +-------------------+
 ```
 
 ---
 
-## 🚀 Quick Start (VS Code)
+## How to Build & Run
 
 ### Prerequisites
+- Windows 10/11
+- Visual Studio 2022 / 2026 Build Tools (MSVC C++20)
+- CMake 3.23+
 
-Install the following on your system:
-1. **[Visual Studio Code](https://code.visualstudio.com/)**
-2. **[CMake](https://cmake.org/download/)** (version 3.23 or newer)
-3. **C++ Compiler**:
-   - **Windows**: Visual Studio 2022 Build Tools ("Desktop development with C++")
-   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-   - **Linux**: `sudo apt install build-essential cmake libasound2-dev libjack-jackd2-dev libgl1-mesa-dev`
-4. **VS Code Extensions**:
-   - `C/C++` (`ms-vscode.cpptools`)
-   - `CMake Tools` (`ms-vscode.cmake-tools`)
+### Building
+Open PowerShell in the project directory:
 
----
+```powershell
+# 1. Configure CMake
+& "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -B build -G "Visual Studio 18 2026"
 
-### Step 1 — Clone the Repository
+# 2. Build Standalone Application
+& "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target NoiseCleaner_Standalone
 
-```bash
-git clone --recurse-submodules https://github.com/your-username/JUCE-Plugin-Boilerplate.git
-cd JUCE-Plugin-Boilerplate
-```
-*(Even if you forget `--recurse-submodules`, CMake will automatically fetch JUCE for you!)*
-
----
-
-### Step 2 — Open in Visual Studio Code
-
-Open the project directory in VS Code:
-```bash
-code .
+# 3. Build VST3 Plugin
+& "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target NoiseCleaner_VST3
 ```
 
-VS Code will automatically detect CMake and ask you to select a **Kit / Compiler** (e.g., *Visual Studio Community Release - amd64* or *Clang*).
+### Binaries Output
+- Standalone App: build/NoiseCleaner_artefacts/Release/Standalone/Arc Noise Reducer.exe
+- VST3 Plugin: build/NoiseCleaner_artefacts/Release/VST3/Arc Noise Reducer.vst3
 
 ---
 
-### Step 3 — Build and Debug
+## Documentation
 
-- **To Build**: Press `F7` or click **Build** in the bottom status bar.
-- **To Run & Debug**: Press `F5` to launch the **Standalone Application**.
-- **To Test in a DAW**: The `.vst3` bundle will be generated inside:
-  ```text
-  build/SimpleGainPlugin_artefacts/Debug/VST3/
-  ```
-
----
-
-## 🛠️ How to Add Your Own Parameters
-
-This boilerplate provides a clean pattern for adding automatable parameters using `apvts`:
-
-### 1. Add the Parameter in `PluginProcessor.cpp`
-
-Inside `createParameterLayout()`:
-```cpp
-// Add a Frequency parameter (20 Hz to 20,000 Hz with logarithmic skew)
-params.push_back(std::make_unique<juce::AudioParameterFloat>(
-    juce::ParameterID{"cutoff", 1},
-    "Cutoff",
-    juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.25f), // Skew factor 0.25 for audio log response
-    1000.0f, // Default value
-    juce::AudioParameterFloatAttributes().withLabel("Hz")
-));
-```
-
-### 2. Read the Parameter in `processBlock()`
-
-```cpp
-const float cutoffHz = apvts.getRawParameterValue("cutoff")->load(std::memory_order_relaxed);
-// Update your filter:
-// filter.setCutoffFrequency(cutoffHz);
-```
-
-### 3. Connect a Slider in `PluginEditor`
-
-In `PluginEditor.h`:
-```cpp
-juce::Slider cutoffSlider;
-std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> cutoffAttachment;
-```
-
-In `PluginEditor.cpp`:
-```cpp
-cutoffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-    processorRef.apvts, "cutoff", cutoffSlider);
-addAndMakeVisible(cutoffSlider);
-```
-
-**That's it!** The parameter is now:
-- Automatable in all major DAWs.
-- Saved & restored automatically when saving the project.
-- Thread-safe and lock-free on the audio thread.
-
----
-
-## ⚡ Real-Time Audio Golden Rules
-
-When programming audio inside `processBlock()`:
-
-| ❌ NEVER DO THIS IN `processBlock` | ✅ DO THIS INSTEAD |
-| :--- | :--- |
-| `new`, `malloc`, or `std::vector::push_back` | Pre-allocate all buffers in `prepareToPlay()` |
-| `std::mutex::lock()` or `CriticalSection` | Use `std::atomic<float>` or lock-free FIFOs (`juce::AbstractFifo`) |
-| `std::cout`, file I/O, or socket calls | Push data to a background queue or timer |
-| Raw sudden float multiplications | Use `juce::SmoothedValue` or `juce::dsp::Gain` |
-
----
-
-## 🔧 Build Configuration Options
-
-In `CMakeLists.txt`, customize the project to your liking:
-
-| Option / Variable | Default | Description |
-| :--- | :--- | :--- |
-| `PROJECT_NAME` | `"SimpleGainPlugin"` | CMake target name |
-| `PRODUCT_NAME` | `"Simple Gain Plugin"` | User-facing plugin name displayed in DAWs |
-| `COMPANY_NAME` | `"Archie DSP"` | Manufacturer name |
-| `BUNDLE_ID` | `com.archiedsp.SimpleGainPlugin` | Unique bundle identifier |
-| `COPY_PLUGIN_TO_SYSTEM` | `OFF` | Set `ON` to auto-copy to system VST3/AU folder |
-| `JUCE_WEB_BROWSER` | `0` | Keeps plugin lightweight and prevents Linux WebKit dependencies |
-
----
-
-## ❓ Frequently Asked Questions & Troubleshooting
-
-### Q: CMake says "No CMAKE_CXX_COMPILER could be found"
-**Fix**: Install Visual Studio Build Tools (Windows) with the "Desktop Development with C++" workload checked, or run `xcode-select --install` (macOS).
-
-### Q: My DAW doesn't detect the plugin
-1. Verify whether your DAW scans 64-bit VST3 plugins.
-2. In your DAW's plugin manager, add the folder:
-   `<YourProject>/build/SimpleGainPlugin_artefacts/Debug/VST3`
-3. If on macOS using Logic/GarageBand, ensure you built the **AU** target.
-
-### Q: How do I debug inside my DAW?
-Open `.vscode/launch.json` and choose **"Attach to DAW"**. Start your DAW, press `F5` in VS Code, and select your DAW process from the prompt. You can now set breakpoints directly inside `processBlock()`!
-
----
-
-## 📄 License & Credits
-
-- **Boilerplate**: Created by [Archie](https://github.com/). Free to use and modify for learning, academic, and commercial plugin development.
-- **JUCE Framework**: JUCE is licensed under the AGPLv3 / Commercial license. See [JUCE License](https://juce.com/legal/juce-8-licence/) for details.
-
----
-
-## 📝 Changelog
-
-### [v0.1.0] — Major Modernization & Hardening
-- **Added**:
-  - **APVTS Parameter System**: Added `AudioProcessorValueTreeState` with automatable `gain` parameter (-60 dB to +12 dB).
-  - **Full DAW State Persistence**: Implemented XML serialization in `getStateInformation()` and `setStateInformation()` to fix state loss on project reload.
-  - **Parameter Smoothing**: Integrated `juce::dsp::Gain<float>` with a 20ms linear ramp to eliminate audible zipper noise and clicks.
-  - **Lock-Free RMS Metering**: Real-time safe stereo output metering via `std::atomic<float>` readouts.
-  - **Animated UI**: Added dual stereo LED VU meters with decay ballistics running on a 30 FPS UI timer.
-  - **Resizable Vector UI**: Configured responsive bounds and aspect ratio resizing limits (`260x320` to `520x640`).
-  - **CMake FetchContent Fallback**: Automatic JUCE 8 download if `modules/JUCE` is missing—works straight from a ZIP download.
-  - **macOS AU Support**: Added AudioUnit (`AU`) target conditionally on Apple platforms for Logic Pro and GarageBand compatibility.
-  - **VS Code Development Tools**: Added `.vscode/` configurations (`launch.json`, `settings.json`, `extensions.json`) with F5 Standalone debugging and "Attach to DAW" presets.
-  - **GitHub Actions CI/CD**: Added cross-platform automated matrix build workflow for Windows (MSVC), macOS (Universal), and Linux.
-- **Fixed**:
-  - **Windows Permission Crash**: Replaced `COPY_PLUGIN_AFTER_BUILD TRUE` with opt-in `COPY_PLUGIN_TO_SYSTEM` to avoid Admin privilege failures when writing to `C:\Program Files`.
-  - **Linux Link Failures**: Disabled `JUCE_WEB_BROWSER` to remove bulky WebKitGTK and WebView2 dependencies.
-  - **Thread-Safety Violations**: Eliminated direct shared variable manipulation between audio and GUI threads.
-- **Changed**:
-  - Upgraded C++ standard from C++17 to **C++20**.
-  - Streamlined module linking (removed unused `juce_product_unlocking` and `juce_audio_devices`).
-  - Overhauled documentation with practical architecture diagrams, tutorials, and a real-time safety guide.
-
-### [v0.0.1] — Initial Release
-- Initial basic JUCE plugin template with CMake build and standalone/VST3 formats.
+A full academic technical report detailing the equations, derivation, windowing theory, parameters, and demonstration analysis is available in:
+- [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md)
